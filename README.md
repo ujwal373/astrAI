@@ -1,7 +1,8 @@
-astrAI
+ad-astrAI
 ======
 
-Project scaffold for experiments with data and autonomous agents.
+A multi agent AI tool for detecting elements and molecules from spectral and image data from galaxies far far away.
+
 
 Folder layout
 -------------
