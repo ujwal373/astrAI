@@ -22,5 +22,7 @@ Setup
 
 Running
 -------
-- `uv run python main.py` — entry point placeholder for now.
+- `uv run python main.py` — just to test and experiment
+- `uv run streamlit run app.py`- to run streamlit UI
+- `uv run mlflow server --port 5000 --backend-store-uri sqlite:///mlruns.db` - to start mlflow server for tracability.
 - Add datasets under `data/` and keep large/raw files out of Git (use `.gitignore`/DVC as needed).
