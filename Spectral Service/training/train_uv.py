@@ -1,7 +1,7 @@
 # spectral_service/training/train_uv.py
 from __future__ import annotations
 
-import json, pickle, time
+import json, pickle, time, sys
 from pathlib import Path
 from typing import Dict, Tuple
 import numpy as np
@@ -11,10 +11,12 @@ from torch.utils.data import DataLoader, TensorDataset
 
 import optuna
 import mlflow
-from .mlflow_utils import setup_mlflow, safe_log_param, safe_log_metric
 
+# Add the training directory to sys.path for imports
+sys.path.insert(0, str(Path(__file__).parent))
 
-from .synthetic_generator import (
+from mlflow_utils import setup_mlflow, safe_log_param, safe_log_metric
+from synthetic_generator import (
     UV_SPECIES, UV_BANDS, DEFAULT_PRIORS_UV,
     build_synthetic_from_planet,
 )
@@ -143,7 +145,7 @@ def train_one(
     # return logits for jupiter sanity if available
     if UV_PKLS["JUPITER"].exists():
         _, wj, fj = load_pkl_spectrum(UV_PKLS["JUPITER"])
-        from .synthetic_generator import resample_to_fixed, make_channels
+        from synthetic_generator import resample_to_fixed, make_channels
         wj_fix, fj_fix = resample_to_fixed(wj, fj, n_resample)
         Xj = make_channels(wj_fix, fj_fix, win=params["baseline_win"])
         xt = torch.tensor(Xj[None, ...], dtype=torch.float32).to(DEVICE)
