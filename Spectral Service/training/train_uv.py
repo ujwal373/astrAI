@@ -1,7 +1,7 @@
 # spectral_service/training/train_uv.py
 from __future__ import annotations
 
-import json, pickle, time
+import json, pickle, time, sys
 from pathlib import Path
 from typing import Dict, Tuple
 import numpy as np
@@ -10,8 +10,13 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 import optuna
+import mlflow
 
-from .synthetic_generator import (
+# Add the training directory to sys.path for imports
+sys.path.insert(0, str(Path(__file__).parent))
+
+from mlflow_utils import setup_mlflow, safe_log_param, safe_log_metric
+from synthetic_generator import (
     UV_SPECIES, UV_BANDS, DEFAULT_PRIORS_UV,
     build_synthetic_from_planet,
 )
@@ -50,7 +55,8 @@ def load_pkl_spectrum(p: Path) -> Tuple[str, np.ndarray, np.ndarray]:
     with open(p, "rb") as f:
         d = pickle.load(f)
     target = str(d.get("target", p.stem)).upper()
-    w = np.asarray(d["wavelength"], dtype=float)
+    # Handle both 'wavelength' and 'wave' keys
+    w = np.asarray(d.get("wavelength", d.get("wave")), dtype=float)
     y = np.asarray(d["flux"], dtype=float)
     m = np.isfinite(w) & np.isfinite(y)
     w, y = w[m], y[m]
@@ -133,6 +139,11 @@ def train_one(
             if bad >= patience:
                 break
 
+    # If best_state is None (no improvement), use current model state
+    if best_state is None:
+        best_state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
+        best_loss = eval_val()
+
     # inference on a reference real planet (Jupiter)
     model.load_state_dict(best_state)
     model.eval()
@@ -140,7 +151,7 @@ def train_one(
     # return logits for jupiter sanity if available
     if UV_PKLS["JUPITER"].exists():
         _, wj, fj = load_pkl_spectrum(UV_PKLS["JUPITER"])
-        from .synthetic_generator import resample_to_fixed, make_channels
+        from synthetic_generator import resample_to_fixed, make_channels
         wj_fix, fj_fix = resample_to_fixed(wj, fj, n_resample)
         Xj = make_channels(wj_fix, fj_fix, win=params["baseline_win"])
         xt = torch.tensor(Xj[None, ...], dtype=torch.float32).to(DEVICE)
@@ -220,47 +231,125 @@ def objective(trial: optuna.Trial) -> float:
 
 
 def main():
+    import mlflow
+
     print("DEVICE:", DEVICE)
-    print("UV planets:", [k for k, v in UV_PKLS.items() if v.exists()])
+    active_planets = [k for k, v in UV_PKLS.items() if v.exists()]
+    print("UV planets:", active_planets)
 
-    study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=N_TRIALS)
+    # ---- MLflow: one run for the whole training job ----
+    # Optional: set experiment once somewhere at top-level
+    # mlflow.set_experiment("spectral-service")
 
-    best = study.best_params
-    print("\nBest params:", best)
-    print("Ref probs:", study.best_trial.user_attrs.get("ref_probs", {}))
+    with mlflow.start_run(run_name="train-uv-mlp"):
 
-    # Final training
-    t0 = time.time()
-    X_train, Y_train, X_val, Y_val = build_multi_planet_dataset(
-        win=best["baseline_win"],
-        n_per_planet=N_SYNTH_PER_PLANET_FINAL,
-        seed0=999
-    )
-    vloss, state, _ = train_one(
-        X_train, Y_train, X_val, Y_val,
-        params=best,
-        n_resample=N_RESAMPLE,
-        epochs=EPOCHS_FINAL,
-        patience=PATIENCE_FINAL
-    )
+        # ---------- params (static) ----------
+        try:
+            mlflow.log_param("domain", "UV")
+            mlflow.log_param("device", DEVICE)
+            mlflow.log_param("n_resample", N_RESAMPLE)
+            mlflow.log_param("n_trials", N_TRIALS)
+            mlflow.log_param("n_synth_per_planet_final", N_SYNTH_PER_PLANET_FINAL)
+            mlflow.log_param("epochs_final", EPOCHS_FINAL)
+            mlflow.log_param("patience_final", PATIENCE_FINAL)
+            mlflow.log_param("planets_used", ",".join(active_planets))
+            mlflow.log_param("species_count", len(UV_SPECIES))
+            mlflow.log_param("species", ",".join(UV_SPECIES))
+        except Exception:
+            pass
 
-    uv_pt = MODEL_DIR / "uv_mlp.pt"
-    uv_cfg = MODEL_DIR / "uv_config.json"
+        # ---------- Optuna tuning span ----------
+        t_opt = time.time()
+        with mlflow.start_span(name="optuna_tuning") as span:
+            study = optuna.create_study(direction="minimize")
+            study.optimize(objective, n_trials=N_TRIALS)
 
-    torch.save({"state_dict": state}, uv_pt)
-    uv_cfg.write_text(json.dumps({
-        "domain": "UV",
-        "species": UV_SPECIES,
-        "bands": UV_BANDS,
-        "best_params": best,
-        "n_resample": N_RESAMPLE,
-        "val_loss": vloss,
-    }, indent=2))
+            opt_time = time.time() - t_opt
+            best = study.best_params
 
-    print("\nSaved:", uv_pt)
-    print("Saved:", uv_cfg)
-    print("Final val_loss:", round(vloss, 4), "| time:", round(time.time() - t0, 2), "s")
+            span.set_attribute("best_objective", float(study.best_value))
+            span.set_attribute("optuna_time_sec", float(opt_time))
+
+            try:
+                mlflow.log_metric("best_objective", float(study.best_value))
+                mlflow.log_metric("optuna_time_sec", float(opt_time))
+
+                # log best params as MLflow params
+                for k, v in best.items():
+                    mlflow.log_param(f"best_{k}", v)
+
+                # store ref probs if objective saved them
+                ref_probs = study.best_trial.user_attrs.get("ref_probs", {})
+                if ref_probs:
+                    mlflow.log_param(
+                        "ref_probs_top",
+                        ", ".join([f"{k}:{round(float(v),3)}" for k, v in sorted(ref_probs.items(), key=lambda x: -x[1])[:8]])
+                    )
+            except Exception:
+                pass
+
+        print("\nBest params:", best)
+        print("Ref probs:", study.best_trial.user_attrs.get("ref_probs", {}))
+
+        # ---------- Final training span ----------
+        t0 = time.time()
+        with mlflow.start_span(name="final_training") as span:
+            X_train, Y_train, X_val, Y_val = build_multi_planet_dataset(
+                win=best["baseline_win"],
+                n_per_planet=N_SYNTH_PER_PLANET_FINAL,
+                seed0=999
+            )
+
+            # dataset stats (handy sanity logs)
+            try:
+                mlflow.log_metric("train_samples", int(len(X_train)))
+                mlflow.log_metric("val_samples", int(len(X_val)))
+            except Exception:
+                pass
+
+            vloss, state, _ = train_one(
+                X_train, Y_train, X_val, Y_val,
+                params=best,
+                n_resample=N_RESAMPLE,
+                epochs=EPOCHS_FINAL,
+                patience=PATIENCE_FINAL
+            )
+
+            train_time = time.time() - t0
+            span.set_attribute("final_val_loss", float(vloss))
+            span.set_attribute("train_time_sec", float(train_time))
+
+            try:
+                mlflow.log_metric("final_val_loss", float(vloss))
+                mlflow.log_metric("train_time_sec", float(train_time))
+            except Exception:
+                pass
+
+        # ---------- Save artifacts ----------
+        uv_pt = MODEL_DIR / "uv_mlp.pt"
+        uv_cfg = MODEL_DIR / "uv_config.json"
+
+        torch.save({"state_dict": state}, uv_pt)
+        uv_cfg.write_text(json.dumps({
+            "domain": "UV",
+            "species": UV_SPECIES,
+            "bands": UV_BANDS,
+            "best_params": best,
+            "n_resample": N_RESAMPLE,
+            "val_loss": float(vloss),
+        }, indent=2))
+
+        print("\nSaved:", uv_pt)
+        print("Saved:", uv_cfg)
+        print("Final val_loss:", round(float(vloss), 4), "| time:", round(time.time() - t0, 2), "s")
+
+        # log artifacts into mlflow
+        try:
+            mlflow.log_artifact(str(uv_pt))
+            mlflow.log_artifact(str(uv_cfg))
+        except Exception:
+            pass
+
 
 
 if __name__ == "__main__":
