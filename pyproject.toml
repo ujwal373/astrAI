@@ -27,4 +27,5 @@ dependencies = [
     "scipy>=1.15.2",
     "fastapi>=0.115.0",
     "uvicorn>=0.34.0",
+    "requests>=2.32.0",
 ]
