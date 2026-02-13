@@ -315,6 +315,17 @@ if (modality == "spectral" and uploaded_file) or (modality == "image" and upload
         if current_modality == "image":
             st.header("📊 Spectral Fingerprint Visualizations")
 
+            # Show which planets were analyzed
+            metadata = final_state.get("metadata", {})
+            if "planets_analyzed" in metadata:
+                planets_list = metadata["planets_analyzed"]
+                st.success(f"✅ Analyzed {len(planets_list)} planets: **{', '.join(planets_list).title()}**")
+
+                # Highlight if user uploaded a new planet
+                if "uploaded_planet" in metadata and metadata["uploaded_planet"] != "none":
+                    uploaded = metadata["uploaded_planet"]
+                    st.info(f"🆕 New planet **{uploaded.title()}** added to comparison!")
+
             # Display errors if any
             errors = final_state.get("errors", [])
             if errors:

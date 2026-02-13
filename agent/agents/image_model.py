@@ -113,6 +113,11 @@ class ImageModelAgent(BaseAgent):
                 mlflow.log_param("planets_loaded", ", ".join(planet_data.keys()))
                 mlflow.log_metric("planet_count", len(planet_data))
 
+                # Store metadata for UI display
+                state.setdefault("metadata", {})["planets_analyzed"] = list(planet_data.keys())
+                state["metadata"]["uploaded_planet"] = uploaded_planet or "none"
+                state["metadata"]["total_planets"] = len(planet_data)
+
         except Exception as exc:
             error_msg = f"Failed to load planet data: {exc}"
             state.setdefault("errors", []).append(error_msg)
@@ -130,35 +135,37 @@ class ImageModelAgent(BaseAgent):
                 start_time = time.time()
 
                 visualizations = []
+                num_planets = len(planet_data)
+                planet_names = ", ".join([p.title() for p in planet_data.keys()])
 
                 # 1. Individual barcodes
                 barcode_fig = self._create_combined_barcodes(planet_data)
                 visualizations.append({
-                    "title": "Spectral Fingerprints (Barcodes)",
+                    "title": f"Spectral Fingerprints ({num_planets} Planets)",
                     "figure": barcode_fig,
-                    "description": "Combined UV+IR spectral fingerprints for each planet"
+                    "description": f"Combined UV+IR spectral fingerprints: {planet_names}"
                 })
 
                 # 2. Similarity heatmap
                 heatmap_fig = self._create_similarity_heatmap(planet_data)
                 visualizations.append({
-                    "title": "Planet Similarity Matrix",
+                    "title": f"Planet Similarity Matrix ({num_planets}×{num_planets})",
                     "figure": heatmap_fig,
-                    "description": "Cosine distance between spectral fingerprints"
+                    "description": f"Cosine distance matrix comparing {num_planets} planetary spectra"
                 })
 
                 # 3. Clustering dendrogram
                 dendro_fig = self._create_dendrogram(planet_data)
                 visualizations.append({
-                    "title": "Hierarchical Clustering",
+                    "title": f"Hierarchical Clustering ({num_planets} Planets)",
                     "figure": dendro_fig,
-                    "description": "Spectral similarity clustering of planets"
+                    "description": f"Dendrogram showing spectral similarity relationships"
                 })
 
                 # 4. Spectral overlay plot
                 overlay_fig = self._create_spectral_overlay(planet_data)
                 visualizations.append({
-                    "title": "Normalized Spectra Overlay",
+                    "title": f"Normalized Spectra Overlay ({num_planets} Planets)",
                     "figure": overlay_fig,
                     "description": "All planet spectra overlaid for comparison"
                 })
@@ -344,7 +351,7 @@ class ImageModelAgent(BaseAgent):
 
             wl_candidates = ["wavelength", "wave", "wl", "lambda", "lam",
                            "wavelength_um", "wavelength_nm", "wavelength_m"]
-            fx_candidates = ["flux", "intensity", "radiance", "reflectance",
+            fx_candidates = ["flux", "intensity", "radiance", "radiance_final", "reflectance",
                            "flux_mjy_sr", "flux_jy", "f"]
 
             wl = next((cols[k] for k in wl_candidates if k in cols), None)
@@ -360,7 +367,7 @@ class ImageModelAgent(BaseAgent):
             keys = {str(k).lower(): k for k in obj.keys()}
 
             wl_candidates = ["wavelength", "wave", "wl", "lambda", "lam", "wavelength_um"]
-            fx_candidates = ["flux", "intensity", "radiance", "reflectance", "f"]
+            fx_candidates = ["flux", "intensity", "radiance", "radiance_final", "reflectance", "f"]
 
             wl_k = next((keys[k] for k in wl_candidates if k in keys), None)
             fx_k = next((keys[k] for k in fx_candidates if k in keys), None)
