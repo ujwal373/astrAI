@@ -294,14 +294,3 @@ gcloud compute instances set-machine-type astra-ai-vm \
   --zone=us-central1-a
 gcloud compute instances start astra-ai-vm --zone=us-central1-a
 ```
-
----
-
-## 🎯 Next Steps
-
-1. **Test locally first** (ensure everything works)
-2. **Push code to GitHub**
-3. **Follow this guide to deploy**
-4. **Share the `http://IP:8501` URL** with your team!
-
-**Your app will be live on the internet!** 🌐
