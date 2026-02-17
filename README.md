@@ -1,6 +1,6 @@
 # ad-astrAI
 
-A multi-agent AI framework for autonomous spectro-visual analysis of astronomical data. Detect elements and molecules from spectral (FITS/CSV) and image (PNG/JPG) data using a coordinated team of specialized AI agents.
+A multi-agent AI framework for autonomous exoplanet atmospheric analysis. Detect molecular compositions from spectral data (FITS/CSV) and generate comparative spectral fingerprint visualizations (PKL) using a coordinated team of specialized AI agents with LLM-powered reasoning.
 
 ## Quick Start
 
@@ -11,21 +11,25 @@ A multi-agent AI framework for autonomous spectro-visual analysis of astronomica
 3. **Start MLflow** (Terminal 1): `uv run mlflow server --port 5000 --backend-store-uri sqlite:///mlruns.db`
 4. **Start Spectral Service** (Terminal 2): `cd "Spectral Service" && uv run uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload`
 5. **Start Web UI** (Terminal 3): `uv run streamlit run app.py`
-6. **Upload data** at http://localhost:8501 and explore results
+6. **Upload test data** at http://localhost:8501:
+   - **Spectral Analysis**: Upload FITS/CSV files from `test_data/spectral/` (e.g., `earth_ir.fits`)
+   - **Graphical Analysis**: Upload PKL files from `test_data/graphical/` (e.g., `jupiter_combined.pkl`)
 
 **Note**: If models are missing, train them first using the instructions in the [Training Models](#training-models) section.
+
+**Reference**: See `Planetary Atmospheric Composition.pdf` for NASA/research-verified element probabilities used in model training.
 
 ## Multi-Agent Architecture
 
 This project uses **LangGraph** to coordinate 6 specialized agents:
 
-1.  **Orchestrator Agent**: The brain. Analyzes input files and routes them to the correct model(s).
-    *   *Routes*: `spectral`, `image`, or `both` (for multi-modal analysis).
-2.  **Spectral Model Agent**: Specializes in 1D spectral data analysis (FITS/CSV).
-3.  **Image Model Agent**: Specializes in 2D visual analysis (PNG/JPG).
-4.  **Inference Agent**: The synthesizer. Consolidates predictions from all models and builds a dynamic **Knowledge Base**.
+1.  **Orchestrator Agent**: The brain. Analyzes input files and routes them to the correct analysis pipeline.
+    *   *Routes*: `spectral` (FITS/CSV → ML models) or `image` (PKL → visualizations).
+2.  **Spectral Model Agent**: Specializes in molecular composition prediction from UV/IR spectral data (FITS/CSV).
+3.  **Image Model Agent**: Generates comparative spectral fingerprint visualizations (barcodes, similarity heatmaps, dendrograms) from planetary PKL data.
+4.  **Inference Agent**: The synthesizer. Consolidates predictions from spectral models and builds a dynamic **Knowledge Base**.
 5.  **Validator Agent**: The quality control. Checks confidence thresholds and flags consistency issues.
-6.  **Reporter Agent**: The communicator. Generates human-readable scientific reports.
+6.  **Reporter Agent**: The communicator. Generates human-readable scientific reports using Google Gemini LLM.
 
 ### Architecture Diagrams
 
@@ -34,6 +38,46 @@ This project uses **LangGraph** to coordinate 6 specialized agents:
 
 **Data-Model Flow Diagram**
 ![Data-Model Flow Diagram](Data-model%20flow%20diagram.png)
+
+## Key Features
+
+### 🔬 Spectral Analysis (ML-Powered)
+- **Molecular Detection**: Identify 28 UV species and 22 IR species using trained MLP models
+- **Domain Flexibility**: Works with UV-only, IR-only, or combined data
+- **Physics-Based Training**: Models trained with 75x augmentation per planet (noise, baseline shift, resolution variation)
+- **Multi-Modal Validation**: Cross-validates UV and IR predictions for overlapping molecules
+- **Confidence Scoring**: Threshold-based filtering with validation flags
+- **LLM Reporting**: Natural language scientific reports via Google Gemini
+
+### 🎨 Graphical Analysis (Visualization)
+- **Spectral Fingerprints**: Combined UV+IR barcode visualizations showing absorption patterns
+- **Similarity Analysis**: Cosine distance heatmap with numerical values for planet comparison
+- **Hierarchical Clustering**: Dendrogram showing spectral groupings and relationships
+- **Interactive Chat**: LLM-powered Q&A about visualization patterns and planetary similarities
+
+### 📚 Scientific Data Sources
+Training labels and validation data sourced from:
+- **NASA Planetary Fact Sheets**: Verified atmospheric compositions
+- **Peer-reviewed spectroscopy papers**: JWST, HST, and ground-based observations
+- **Reference Document**: See `Planetary Atmospheric Composition.pdf` for complete element probability tables
+
+**Supported Molecules**: CO₂, H₂O, CH₄, O₃, N₂, O₂, Ar, SO₂, H₂S, NH₃, HCl, and 18+ additional species
+
+## Technologies
+
+**Core Stack:**
+- **LangGraph** - Multi-agent orchestration and state management
+- **Google Gemini LLM** - Natural language reasoning and report generation
+- **PyTorch + Scikit-learn** - ML model training and inference
+- **FastAPI** - High-performance backend API
+- **Streamlit** - Interactive web interface
+- **MLflow** - Experiment tracking and model registry
+
+**Scientific Libraries:**
+- **Astropy** - FITS file handling and astronomical data processing
+- **NumPy/Pandas** - Numerical computing and data manipulation
+- **Matplotlib/Seaborn** - Scientific visualization
+- **SciPy** - Signal processing (Savitzky-Golay filtering, hierarchical clustering)
 
 ## Getting Started
 
@@ -123,18 +167,53 @@ uv run streamlit run app.py
 
 ### 4. How to Use the UI
 
-1.  **Upload Data**:
-    *   `*.fits` / `*.csv` -> Triggers **Spectral Analysis**
-    *   `*.png` / `*.jpg` -> Triggers **Image Analysis**
-    *   **Multi-Modal Trick**: Include `complex` in the filename (e.g., `complex_nebula.fits`) to trigger **Both** spectral and image analysis.
+#### **Two Analysis Modes:**
 
-2.  **View Results**:
-    *   **Mission Report**: Read the AI-generated summary.
-    *   **Agent Trace**: See the execution path (e.g., Orchestrator -> Spectral -> Inference...).
-    *   **Predictions**: View the consolidated element detection table.
+**🔬 Spectral Analysis** (Recommended for Unknown Exoplanets)
+- **Upload**: Single FITS or CSV file containing spectral data
+- **Works with**: UV-only OR IR-only data
+- **Output**: Molecular composition predictions (CO₂, H₂O, CH₄, O₃, etc.)
+- **Test Files**: Use files from `test_data/spectral/` (e.g., `earth_ir.fits`, `mars_uv.csv`)
 
-3.  **Chat with Data**:
-    *   Use the chat interface at the bottom to ask questions about the findings (e.g., *"What elements were found with high confidence?"*).
+**🎨 Graphical Analysis** (Known Planets Only)
+- **Upload**: PKL files containing both UV and IR spectral data
+- **Requires**: Complete UV+IR data for comparative analysis
+- **Output**: Spectral fingerprint visualizations (barcodes, similarity heatmaps, hierarchical clustering)
+- **Test Files**: Use files from `test_data/graphical/` (e.g., `jupiter_combined.pkl`, `earth_uv.pkl` + `earth_ir.pkl`)
+
+#### **View Results:**
+
+**For Spectral Analysis:**
+- **Mission Report**: AI-generated scientific summary
+- **Agent Trace**: Execution path (Orchestrator → Spectral → Inference → Validator → Reporter)
+- **Consolidated Predictions**: Element detection table with confidence scores
+- **Knowledge Base**: Multi-modal element validation across UV/IR domains
+- **Chat with Data**: Ask questions about molecular composition (e.g., *"Which molecules were detected with high confidence?"*)
+
+**For Graphical Analysis:**
+- **Spectral Fingerprints**: UV+IR barcode visualizations for each planet
+- **Similarity Matrix**: Cosine distance heatmap with values showing spectral similarity
+- **Hierarchical Clustering**: Dendrogram grouping planets by spectral patterns
+- **Chat with Visualizations**: Ask about patterns, planet similarities, and molecular fingerprints
+
+## Test Data
+
+The `test_data/` directory contains sample files for both analysis modes:
+
+### Spectral Analysis Test Files (`test_data/spectral/`)
+- **FITS format**: `earth_ir.fits`, `mars_uv.fits` - Standard astronomical spectral data
+- **CSV format**: `jupiter_ir.csv`, `venus_uv.csv` - Tabular wavelength/flux data
+- **Use case**: Test molecular composition prediction on unknown exoplanets
+
+### Graphical Analysis Test Files (`test_data/graphical/`)
+- **Combined files**: `jupiter_combined.pkl`, `mars_combined.pkl` - Single file with UV+IR data
+- **Separate files**: `earth_uv.pkl` + `earth_ir.pkl` - Upload both for complete analysis
+- **Use case**: Generate comparative spectral fingerprint visualizations
+
+**File Format Requirements:**
+- **FITS**: Must contain wavelength and flux columns
+- **CSV**: Requires `wavelength` (or `wave`) and `flux` (or `radiance`) columns
+- **PKL**: Python pickle format with structured numpy arrays or dictionaries
 
 ## Training Models
 
@@ -186,19 +265,21 @@ astraAI/
 ├── agent/                          # Multi-agent system
 │   ├── agents/                     # Source code for all 6 agents
 │   │   ├── orchestrator.py         # Routing agent
-│   │   ├── spectral_agent.py       # Spectral model interface
-│   │   ├── image_agent.py          # Image model interface
+│   │   ├── spectral_model.py       # Spectral model inference agent
+│   │   ├── image_model.py          # Spectral fingerprint visualization agent
 │   │   ├── inference_agent.py      # Prediction consolidation
 │   │   ├── validator_agent.py      # Quality control
-│   │   └── reporter_agent.py       # Report generation
+│   │   └── reporter_agent.py       # LLM-powered report generation
 │   ├── graph.py                    # LangGraph definitions and routing logic
 │   └── state.py                    # Shared state schema
 │
 ├── Spectral Service/               # Backend ML service
 │   ├── app/                        # FastAPI application
 │   │   ├── main.py                 # API entry point
-│   │   └── routers/
-│   │       └── analyze.py          # Spectral analysis endpoints
+│   │   ├── routers/
+│   │   │   └── analyze.py          # Spectral analysis endpoints
+│   │   └── utils/
+│   │       └── io.py               # FITS/CSV/PKL data loaders
 │   ├── training/                   # Model training pipeline
 │   │   ├── train_uv.py             # UV model training
 │   │   ├── train_ir.py             # IR model training
@@ -206,17 +287,35 @@ astraAI/
 │   │   ├── expanded_species.py     # Species definitions & planet labels
 │   │   └── mlflow_utils.py         # MLflow integration
 │   ├── data/
-│   │   └── real/                   # Real planetary spectra (.pkl files)
+│   │   └── real/                   # Real planetary spectra (training data)
+│   │       ├── earth_uv.pkl        # Earth UV spectrum
+│   │       ├── earth_ir.pkl        # Earth IR spectrum
+│   │       ├── jupiter_uv.pkl      # Jupiter UV spectrum
+│   │       ├── jupiter_ir.pkl      # Jupiter IR spectrum
+│   │       └── ...                 # Other planets (Mars, Venus, etc.)
 │   └── models/                     # Trained models (generated after training)
 │       ├── uv_mlp.pt               # UV model weights
 │       ├── uv_config.json          # UV model configuration
 │       ├── ir_mlp.pt               # IR model weights
 │       └── ir_config.json          # IR model configuration
 │
+├── test_data/                      # Sample test files for users
+│   ├── spectral/                   # Test files for Spectral Analysis
+│   │   ├── earth_ir.fits           # Earth IR spectrum (FITS)
+│   │   ├── mars_uv.csv             # Mars UV spectrum (CSV)
+│   │   └── ...                     # Other test spectra
+│   └── graphical/                  # Test files for Graphical Analysis
+│       ├── jupiter_combined.pkl    # Jupiter combined UV+IR
+│       ├── earth_uv.pkl            # Earth UV only (requires pair)
+│       ├── earth_ir.pkl            # Earth IR only (requires pair)
+│       └── ...                     # Other planet PKL files
+│
 ├── app.py                          # Streamlit frontend application
 ├── experiments/                    # Jupyter notebooks for prototyping
 ├── pyproject.toml                  # Project dependencies (uv package manager)
 ├── .env                            # Environment configuration (API keys)
+├── GCP_DEPLOY.md                   # Google Cloud Platform deployment guide
+├── Planetary Atmospheric Composition.pdf  # NASA/research reference data
 └── README.md                       # This file
 ```
 
@@ -226,6 +325,30 @@ This project uses **MLflow Tracing** for deep observability.
 - **Spans**: Track every agent's execution time and inputs/outputs.
 - **Metrics**: Monitor token usage, latency, and tool calls.
 - **Artifacts**: Store generated reports and data snapshots.
+
+## Deployment
+
+### Local Development
+Follow the [Quick Start](#quick-start) section above.
+
+### Google Cloud Platform
+For production deployment on GCP Virtual Machines, see the comprehensive guide:
+
+📘 **[GCP_DEPLOY.md](GCP_DEPLOY.md)** - Complete deployment instructions including:
+- VM setup with firewall configuration
+- UV package manager installation
+- tmux-based service management
+- Cost optimization (starts at $10/month with spot instances)
+- Troubleshooting and monitoring
+
+**Quick Deploy Summary:**
+1. Create GCP VM (n1-standard-2 recommended)
+2. Open firewall ports: 5000 (MLflow), 8001 (Spectral Service), 8501 (Streamlit)
+3. SSH into VM and clone repository
+4. Install UV: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+5. Install dependencies: `uv sync`
+6. Start services in tmux (see GCP_DEPLOY.md for commands)
+7. Access via `http://YOUR_VM_IP:8501`
 
 ## Troubleshooting
 
@@ -276,6 +399,16 @@ This project uses **MLflow Tracing** for deep observability.
 - **MLflow (5000)**: Change port in command: `mlflow server --port 5001`
 - **Spectral Service (8001)**: Change port in command and update `.env`
 - **Streamlit (8501)**: Streamlit will auto-increment to 8502
+
+### Graphical Analysis Requires Both UV and IR Data
+**Issue**: "Missing: planet_ir.pkl" error when uploading single PKL file
+
+**Solution**:
+- **Option 1**: Upload a combined file (e.g., `jupiter_combined.pkl`)
+- **Option 2**: Upload both UV and IR files together (e.g., `jupiter_uv.pkl` + `jupiter_ir.pkl`)
+- **Option 3**: For unknown exoplanets with incomplete data, use **Spectral Analysis** mode instead
+
+**Note**: Graphical Analysis is designed for comparative visualization of known planets with complete UV+IR data. For molecular composition prediction on single-domain data, use Spectral Analysis mode.
 
 ## Contributing
 
